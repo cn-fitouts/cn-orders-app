@@ -3269,7 +3269,7 @@ function renderSheetCfg() {
     box.append(h('label', {}, lab + ' ', h('input', { type: 'number', step: '0.05', value: s[k], style: 'width:80px', onchange: e => { const v = parseFloat(e.target.value); if (!isNaN(v)) { cfg.sheet = Object.assign(sheetCfg(), { [k]: v }); saveCfg(); } } }))));
 }
 // Colour per drawer height and runner weight (all different, all readable with white text).
-const HL_COLOURS = { N: '#0f766e', M: '#1d4ed8', K: '#15803d', C: '#ea580c', F: '#7e22ce', '30KG': '#475569', '40KG': '#dc2626', '60KG': '#a16207', '70KG': '#be185d' };
+const HL_COLOURS = { N: '#334155', M: '#1d4ed8', K: '#15803d', C: '#ea580c', F: '#7e22ce', '30KG': '#475569', '40KG': '#dc2626', '60KG': '#a16207', '70KG': '#0e7490' };
 function qtyBox(q) { const s = String(q); return h('div', { class: 'qty' }, h('small', { text: 'QTY' }), h('b', { text: s, style: 'font-size:' + (s.length <= 2 ? 13 : s.length === 3 ? 11.5 : 9.5) + 'pt' })); }
 function buildLabel(item, outline) {
   const info = labelInfo(item), f = info.finish;
