@@ -124,14 +124,15 @@
   #printArea { display: none; }
   .lbl-row .head { font-weight: 800; }
   table.simple td.tcell { width: 52px; padding: 2px 4px; }
-  .lbl { position: absolute; box-sizing: border-box; display: flex; align-items: stretch; gap: 1.6mm; padding: 1.6mm 1.8mm 1.6mm 0; overflow: hidden; background: #fff; font-family: Arial, Helvetica, sans-serif; color: #000; }
-  .lbl.outline { outline: 0.2mm dashed #999; outline-offset: -0.2mm; }
+  .lbl { position: absolute; box-sizing: border-box; padding: 1.25mm; background: #fff; font-family: Arial, Helvetica, sans-serif; color: #000; }
+  .lbl .in { box-sizing: border-box; width: 100%; height: 100%; display: flex; align-items: stretch; gap: 1.4mm; padding: 1.2mm 1.4mm 1.2mm 0; overflow: hidden; border-radius: 1mm; }
+  .lbl.outline .in { outline: 0.2mm dashed #999; outline-offset: -0.2mm; }
   .lbl .band { width: 4mm; flex: none; display: flex; align-items: center; justify-content: center; }
   .lbl .band span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 6.5pt; font-weight: 800; letter-spacing: .4mm; }
-  .lbl .pimg { width: 27mm; height: 27mm; flex: none; align-self: center; object-fit: contain; }
+  .lbl .pimg { width: 25mm; height: 25mm; flex: none; align-self: center; object-fit: contain; }
   .lbl .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 0.8mm; }
-  .lbl .hd { font-size: 15pt; font-weight: 800; line-height: 1.05; letter-spacing: .1mm; }
-  .lbl .hd.long { font-size: 10.5pt; line-height: 1.12; max-height: 12.2mm; overflow: hidden; }
+  .lbl .hd { font-size: 11pt; font-weight: 800; line-height: 1.15; max-height: 13.4mm; overflow: hidden; }
+  .lbl .hd .hl { display: inline-block; background: #000; color: #fff; border-radius: 0.8mm; padding: 0 1mm; }
   .lbl .sub { font-size: 8pt; font-weight: 700; }
   .lbl .nm { font-size: 6.5pt; font-weight: 700; line-height: 1.15; max-height: 7.6mm; overflow: hidden; color: #222; }
   .lbl .cd { font-size: 7.5pt; font-weight: 700; font-family: 'Courier New', monospace; color: #000; }
@@ -3250,16 +3251,16 @@ function labelInfo(item) {
   const kg = (n.match(/(\d+)\s*kg/i) || [])[1];
   const fk = f ? f.k + ' ' : '';
   const sys = /LEGRABOX/i.test(n) ? '' : /METABOX/i.test(n) ? 'METABOX ' : /MOVENTO/i.test(n) && !/TIP-ON/i.test(n) ? 'MOVENTO ' : null;
-  let head = null, sub = '';
+  let head = null, sub = '', hl = '';
   if (sys !== null) {
     if (/Locking Device/i.test(n)) { head = sys + 'LOCK ' + hand; sub = 'locking device'; }
-    else if (/Carcase Runner|Hand Runner|Runner Set|extension runner/i.test(n) && !/TIP-ON/i.test(n)) { head = sys + 'RUNNER ' + len; sub = [hand, kg ? kg + 'kg' : '', /\bSet\b|Left\s*(&|and)\s*Right/i.test(n) ? 'pair' : '', /BLUMOTION S/i.test(n) && sys === 'MOVENTO ' ? 'BLUMOTION S' : '', pack ? 'pack of ' + pack : ''].filter(Boolean).join(' · '); }
-    else if (/Side|pure [NMKCF] Height/i.test(n) && len && H) { head = (sys || fk) + len + ' ' + H; sub = [hand ? hand + ' side' : 'pair of sides', pack ? 'pack of ' + pack : ''].filter(Boolean).join(' · '); }
-    else if (/Back .*Fixing Set/i.test(n) && H) { head = fk + 'BACK ' + H; sub = 'back fixing set'; }
-    else if (/Front (Fixing )?Bracket/i.test(n)) { head = sys + 'FRONT BRKT' + (H ? ' ' + H : ''); sub = [hand, /expando/i.test(n) ? 'Expando' : ''].filter(Boolean).join(' · '); }
+    else if (/Carcase Runner|Hand Runner|Runner Set|extension runner/i.test(n) && !/TIP-ON/i.test(n)) { head = sys + 'RUNNER ' + len; hl = kg ? kg + 'KG' : ''; sub = [hand, /\bSet\b|Left\s*(&|and)\s*Right/i.test(n) ? 'pair' : '', /BLUMOTION S/i.test(n) && sys === 'MOVENTO ' ? 'BLUMOTION S' : '', pack ? 'pack of ' + pack : ''].filter(Boolean).join(' · '); }
+    else if (/Side|pure [NMKCF] Height/i.test(n) && len && H) { head = (sys || fk) + len; hl = H; sub = [hand ? hand + ' side' : 'pair of sides', pack ? 'pack of ' + pack : ''].filter(Boolean).join(' · '); }
+    else if (/Back .*Fixing Set/i.test(n) && H) { head = fk + 'BACK'; hl = H; sub = 'back fixing set'; }
+    else if (/Front (Fixing )?Bracket/i.test(n)) { head = sys + 'FRONT BRKT'; hl = H; sub = [hand, /expando/i.test(n) ? 'Expando' : ''].filter(Boolean).join(' · '); }
     else if (/cover cap/i.test(n)) { head = fk + 'CAP ' + (/internal|inner/i.test(n) ? 'INT' : 'EXT'); sub = 'cover cap'; }
   }
-  return { head: head ? head.replace(/\s+/g, ' ').trim() : null, sub, finish: f, name: cleanName(n) };
+  return { head: head ? head.replace(/\s+/g, ' ').trim() : null, hl, sub, finish: f, name: cleanName(n) };
 }
 function sheetCfg() { return Object.assign({ top: 12.9, left: 4.65, w: 99.1, h: 33.9, gapX: 2.5, gapY: 0 }, cfg.sheet || {}); }
 function renderSheetCfg() {
@@ -3273,10 +3274,10 @@ function buildLabel(item, outline) {
   const band = h('div', { class: 'band', style: f ? 'background:' + f.bg + ';color:' + f.fg + (f.border ? ';box-shadow:inset 0 0 0 0.3mm ' + f.border : '') : 'background:#fff' }, f ? h('span', { text: f.k }) : null);
   const img = h('img', { class: 'pimg', alt: '', src: imgUrl(item.sku) });
   const txt = info.head
-    ? h('div', { class: 'txt' }, h('div', { class: 'hd', text: info.head }), info.sub ? h('div', { class: 'sub', text: info.sub }) : null, h('div', { class: 'nm', text: info.name }), h('div', { class: 'cd', text: item.sku }))
+    ? h('div', { class: 'txt' }, h('div', { class: 'hd' }, info.head, info.hl ? ' ' : null, info.hl ? h('span', { class: 'hl', text: info.hl }) : null), info.sub ? h('div', { class: 'sub', text: info.sub }) : null, h('div', { class: 'nm', text: info.name }), h('div', { class: 'cd', text: item.sku }))
     : h('div', { class: 'txt' }, h('div', { class: 'hd long', text: info.name }), h('div', { class: 'cd', text: item.sku }));
   const qr = h('div', { class: 'qr' }); qr.innerHTML = qrSvg(item.sku);
-  return h('div', { class: 'lbl' + (outline ? ' outline' : '') }, band, img, txt, h('div', { class: 'right' }, qr, qtyBox(getDefQty(item.sku))));
+  return h('div', { class: 'lbl' + (outline ? ' outline' : '') }, h('div', { class: 'in' }, band, img, txt, h('div', { class: 'right' }, qr, qtyBox(getDefQty(item.sku)))));
 }
 function renderLabels() {
   renderSheetCfg();
@@ -3291,7 +3292,7 @@ function renderLabels() {
     box.append(h('div', { class: 'lbl-row' },
       h('input', { type: 'checkbox', checked: labelSel.has(item.sku), onchange: e => { e.target.checked ? labelSel.add(item.sku) : labelSel.delete(item.sku); } }),
       thumb(item.sku), qr,
-      h('div', {}, info.head ? h('div', { class: 'head', text: info.head + (info.sub ? ' — ' + info.sub : '') }) : null, h('div', { class: 'name', text: info.name }), h('div', { class: 'sku', text: item.sku })), q));
+      h('div', {}, info.head ? h('div', { class: 'head', text: info.head + (info.hl ? ' ' + info.hl : '') + (info.sub ? ' — ' + info.sub : '') }) : null, h('div', { class: 'name', text: info.name }), h('div', { class: 'sku', text: item.sku })), q));
   });
 }
 $('lblAll').addEventListener('click', () => { LABEL_ITEMS.forEach(i => labelSel.add(i.sku)); renderLabels(); });
