@@ -58,8 +58,9 @@
   .category-header { padding: 12px 14px; background: var(--brand-lt); color: var(--brand-ink); font-weight: 700; display: flex; justify-content: space-between; cursor: pointer; user-select: none; }
   .category-header .count { opacity: .75; font-weight: 600; }
   .items.collapsed { display: none; }
-  .item-row { display: grid; grid-template-columns: 34px 120px 1fr 96px 74px; gap: 10px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--bg); }
-  .item-row.noq12 { grid-template-columns: 34px 120px 1fr 74px; }
+  .thumb { width: 48px; height: 48px; object-fit: contain; background: #fff; border-radius: 6px; }
+  .item-row { display: grid; grid-template-columns: 34px 48px 120px 1fr 96px 74px; gap: 10px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--bg); }
+  .item-row.noq12 { grid-template-columns: 34px 48px 120px 1fr 74px; }
   .item-row.checked { background: var(--brand-lt); }
   .item-row input[type=checkbox] { width: 24px; height: 24px; }
   .sku { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: var(--mut); }
@@ -134,8 +135,8 @@
     .lbl .txt .q { font-size: 10pt; font-weight: 700; }
   }
   @media (max-width: 760px) {
-    .item-row, .item-row.noq12 { grid-template-columns: 34px 1fr 74px; }
-    .item-row .sku, .item-row .q12 { grid-column: 2; }
+    .item-row, .item-row.noq12 { grid-template-columns: 34px 48px 1fr 74px; }
+    .item-row .sku, .item-row .q12 { grid-column: 3; }
     .lbl-row { grid-template-columns: 34px 1fr 90px; } .lbl-row .qrp { display: none; }
   }
 </style>
@@ -2645,6 +2646,9 @@ const todayLabel = () => new Date().toLocaleDateString('en-AU', { day: '2-digit'
 const defaultTitle = () => 'Wilson & Bradley Hardware Order - ' + todayLabel();
 function newDraft() { return { id: 'd' + Date.now(), title: defaultTitle(), lines: [], progress: null }; }
 if (!draft || !Array.isArray(draft.lines)) { draft = newDraft(); saveDraft(); }
+// Product photos from Wilson & Bradley's image store (blank square if a photo doesn't exist).
+const imgUrl = sku => 'https://web-s3-prod-pub.s3.ap-southeast-2.amazonaws.com/media/products/' + encodeURIComponent(sku) + '_1_S.jpg';
+function thumb(sku) { const i = h('img', { class: 'thumb', loading: 'lazy', alt: '', src: imgUrl(sku) }); i.addEventListener('error', () => { i.style.visibility = 'hidden'; }); return i; }
 const getDefQty = sku => { const v = parseInt(defaultQty[sku], 10); if (v > 0) return v; const b = parseInt(BAKED_QTY[sku], 10); return b > 0 ? b : 1; };
 
 // ---------- feedback ----------
@@ -2741,7 +2745,7 @@ function showView(v) {
   if (v === 'order') renderOrder();
   if (v === 'scan') { renderScan(); focusScan(); try { navigator.wakeLock && navigator.wakeLock.request('screen').then(w => { wakeLock = w; }).catch(() => {}); } catch (e) {} }
   else if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
-  if (v === 'orders') { renderOrders(); }
+  if (v === 'orders') { renderOrders(); if (creds().key && cfg.listConf) refreshConf(true); }
   if (v === 'labels') renderLabels();
   if (v === 'settings') renderSettings();
   window.scrollTo(0, 0);
@@ -2828,7 +2832,7 @@ function renderOrder() {
         if (l && v > 0) { l.qty = v; saveDraft(); }
       } });
       const row = h('div', { class: 'item-row' + (browseView === 'quick' ? '' : ' noq12') + (line ? ' checked' : '') },
-        cb, h('div', { class: 'sku', text: item.sku }), h('div', { class: 'name', text: item.name }),
+        cb, thumb(item.sku), h('div', { class: 'sku', text: item.sku }), h('div', { class: 'name', text: item.name }),
         browseView === 'quick' ? h('div', { class: 'q12', text: item.qty12 + ' / 12mo' }) : null, q);
       wrap.append(row);
     });
@@ -2915,7 +2919,10 @@ const creds = () => ({ key: localStorage.getItem('wb_trello_api_key') || '', tok
 async function trello(method, path, params, body) {
   const { key, token } = creds();
   if (!key || !token) throw new Error('Trello is not connected — see Settings.');
-  const usp = new URLSearchParams(Object.assign({}, params || {}, { key, token }));
+  // GETs (and file uploads) carry params in the URL; other writes send them as a form body so long descriptions fit.
+  const inUrl = method === 'GET' || body;
+  const usp = new URLSearchParams(Object.assign({}, inUrl ? (params || {}) : {}, { key, token }));
+  if (!inUrl && params && Object.keys(params).length) body = new URLSearchParams(params);
   const res = await fetch('https://api.trello.com/1' + path + '?' + usp.toString(), { method, body });
   if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error('Trello ' + res.status + ': ' + (t || res.statusText)); }
   return res.json();
@@ -2967,47 +2974,172 @@ $('sendBtn').addEventListener('click', async () => {
 // ---------- ORDERS view ----------
 function cardTime(id) { return new Date(parseInt(id.substring(0, 8), 16) * 1000).toISOString(); }
 let confCards = [];
+let confBusy = false;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function shortDate(s) { // "15 October 2026" -> "15 Oct 2026"
+  const m = (s || '').match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
+  if (!m) return todayLabel();
+  return String(m[1]).padStart(2, '0') + ' ' + m[2].slice(0, 3) + ' ' + m[3];
+}
+function isoFromConfDate(s, fallback) {
+  const m = (s || '').match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})(?:,\s*(\d{1,2}):(\d{2})\s*(AM|PM))?/i);
+  if (!m) return fallback;
+  const mi = MONTHS.findIndex(x => x.toLowerCase() === m[2].slice(0, 3).toLowerCase());
+  let hr = m[4] ? parseInt(m[4], 10) % 12 : 12; if (m[6] && m[6].toUpperCase() === 'PM') hr += 12;
+  const d = new Date(parseInt(m[3], 10), mi < 0 ? 0 : mi, parseInt(m[1], 10), m[4] ? hr : 12, m[5] ? parseInt(m[5], 10) : 0);
+  return isNaN(d) ? fallback : d.toISOString();
+}
+// Read a Wilson & Bradley confirmation email (as Trello stores it in the card description).
+function parseConf(card) {
+  const d = card.desc || '';
+  const num = ((d.match(/Order Number:\s*\*?(\d+)/i) || card.name.match(/(\d{6,})/) || [])[1]) || '';
+  const orderDate = (d.match(/Order date:\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4}(?:,\s*\d{1,2}:\d{2}\s*[AP]M)?)/i) || [])[1] || '';
+  const delivery = (d.match(/Delivery\/Pickup date:\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i) || [])[1] || '';
+  const total = (d.match(/Total \(inc GST\):\s*\$([\d,.]+)/i) || [])[1] || '';
+  const ref = ((d.match(/Debtor order number:\s*(.*?)\s+Order date:/i) || [])[1] || '').trim();
+  const lines = []; const re = /\/p\/([^>\s]+)>\s+([^\s<]+)\s+\$([\d,.]+)\s+(\d+)\s+\$([\d,.]+)/g; let m;
+  while ((m = re.exec(d))) {
+    let sku = m[2]; try { sku = decodeURIComponent(sku); } catch (e) {}
+    const item = BY_SKU.get(sku.toUpperCase());
+    const esc = m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nm = (d.match(new RegExp('/p/' + esc + '>\\s+([^\\n<]+?)\\s*\\n')) || [])[1];
+    lines.push({ sku: item ? item.sku : sku, qty: parseInt(m[4], 10), name: item ? item.name : (nm || sku), price: m[3], lineTotal: m[5] });
+  }
+  return { num, orderDate, delivery, total, ref, lines };
+}
+function compareLines(appLines, confLines) {
+  const A = new Map(appLines.map(l => [l.sku.toUpperCase(), l])), C = new Map(confLines.map(l => [l.sku.toUpperCase(), l]));
+  const r = { same: [], qtyDiff: [], missing: [], extra: [] };
+  A.forEach((l, k) => { const c = C.get(k); if (!c) r.missing.push(l); else if (c.qty !== l.qty) r.qtyDiff.push({ sku: l.sku, name: l.name, app: l.qty, conf: c.qty }); else r.same.push(l); });
+  C.forEach((l, k) => { if (!A.has(k)) r.extra.push(l); });
+  return r;
+}
+function matchScore(o, conf) {
+  const a = new Set(o.lines.map(l => l.sku.toUpperCase())), b = new Set(conf.lines.map(l => l.sku.toUpperCase()));
+  let common = 0; a.forEach(k => { if (b.has(k)) common++; });
+  const union = new Set([...a, ...b]).size;
+  return union ? common / union : 0;
+}
+function comparisonText(cmp) {
+  const out = [];
+  if (!cmp.qtyDiff.length && !cmp.missing.length && !cmp.extra.length) out.push('✅ Confirmation matches the order exactly (' + cmp.same.length + ' lines).');
+  else {
+    out.push('⚠️ Differences between the order and the supplier confirmation:');
+    cmp.qtyDiff.forEach(d => out.push('- Qty changed: ' + d.sku + ' ordered ' + d.app + ', confirmed ' + d.conf));
+    cmp.missing.forEach(l => out.push('- NOT on confirmation: ' + l.qty + ' x ' + l.sku + ' - ' + l.name));
+    cmp.extra.forEach(l => out.push('- Only on confirmation: ' + l.qty + ' x ' + l.sku + ' - ' + l.name));
+    out.push('(' + cmp.same.length + ' line(s) matched exactly)');
+  }
+  return out.join('\n');
+}
+function summaryBlock(conf, card, cmp) {
+  return ['**Supplier order confirmation #' + conf.num + '**',
+    'Order date: ' + (conf.orderDate || '-') + '  |  Delivery/pickup: ' + (conf.delivery || '-'),
+    'Reference: ' + (conf.ref || '-') + '  |  Total (inc GST): $' + (conf.total || '-'),
+    'Confirmation email: ' + card.shortUrl, '',
+    cmp ? comparisonText(cmp) : '', '',
+    '**Confirmed items**', ...conf.lines.map(l => '- ' + l.qty + ' x ' + l.sku + ' - ' + l.name + ' ($' + l.lineTotal + ')')].join('\n');
+}
+const orderedName = (title, num) => 'ORDERED - ' + title.replace(/^ORDERED - /, '').replace(/ - #\d+$/, '') + (num ? ' - #' + num : '');
+function doneConf(id) { if (!matchedConf.includes(id)) { matchedConf.push(id); LS.set('wb4_matched', matchedConf); } }
+
 async function refreshConf(quiet) {
   if (!cfg.listConf) { confCards = []; renderConf(); return; }
+  if (confBusy) return; confBusy = true;
   try {
     confCards = await trello('GET', '/lists/' + cfg.listConf + '/cards', { fields: 'name,desc,shortUrl' });
+    await autoProcess();
     renderConf();
     if (!quiet) toast('Confirmations refreshed');
   } catch (e) { if (!quiet) toast(e.message, true); renderConf(); }
+  finally { confBusy = false; }
 }
 function openOrders() { return orders.filter(o => o.status === 'sent'); }
+// Confident cases are handled automatically; anything unclear is left on screen for a person to decide.
+async function autoProcess() {
+  for (const c of confCards.filter(c => !matchedConf.includes(c.id))) {
+    const conf = parseConf(c);
+    if (!conf.lines.length || !conf.num) continue;                        // couldn't read it - leave for manual
+    if (orders.some(o => o.confirmation && o.confirmation.num === conf.num)) { doneConf(c.id); continue; }
+    const scored = openOrders().map(o => ({ o, s: matchScore(o, conf) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s);
+    if (!scored.length) { await addExternal(c, conf, true); continue; }   // no app order shares any item
+    const best = scored[0], second = scored[1];
+    if (best.s >= 0.6 && (!second || best.s - second.s >= 0.3)) await linkConf(c, best.o.id, true);
+  }
+}
 function renderConf() {
   const hint = $('confHint'), box = $('confList'); box.innerHTML = '';
   if (!cfg.listConf) { hint.textContent = 'Not set up yet — see Settings → Order confirmation emails.'; $('btnRefreshConf').style.display = 'none'; return; }
   $('btnRefreshConf').style.display = '';
   const fresh = confCards.filter(c => !matchedConf.includes(c.id));
-  hint.textContent = fresh.length ? fresh.length + ' confirmation(s) waiting to be matched to an order.' : 'No unmatched confirmations.';
+  hint.textContent = fresh.length ? fresh.length + ' confirmation(s) need a decision.' : 'All confirmations are matched (checked every 5 minutes while the app is open).';
   fresh.forEach(c => {
+    const conf = parseConf(c);
+    const ranked = openOrders().map(o => ({ o, s: matchScore(o, conf) })).sort((a, b) => b.s - a.s);
     const sel = h('select', {}, h('option', { value: '', text: 'Match to order…' }),
-      openOrders().map(o => h('option', { value: o.id, text: o.title + ' (' + fmtDate(o.sentAt) + ')' })));
-    if (openOrders().length === 1) sel.value = openOrders()[0].id;
+      ranked.map(x => h('option', { value: x.o.id, text: x.o.title + ' (' + Math.round(x.s * 100) + '% match)' })));
+    if (ranked.length && ranked[0].s > 0) sel.value = ranked[0].o.id;
     box.append(h('div', { class: 'card', style: 'background:var(--warn-lt);margin:8px 0' },
       h('div', { class: 'order-head' }, h('div', { class: 't', text: c.name }), h('a', { href: c.shortUrl, target: '_blank', rel: 'noopener', text: 'view email' })),
+      h('div', { class: 'muted', text: conf.lines.length ? conf.lines.length + ' item(s): ' + conf.lines.map(l => l.qty + '× ' + l.sku).join(', ') : "Couldn't read the items from this email." }),
       h('div', { class: 'order-actions' }, sel,
-        h('button', { class: 'btn-primary btn-small', text: 'Link & mark placed', onclick: () => linkConf(c, sel.value) }),
-        h('button', { class: 'btn-secondary btn-small', text: 'Ignore', onclick: () => { matchedConf.push(c.id); LS.set('wb4_matched', matchedConf); renderConf(); } }))));
+        h('button', { class: 'btn-primary btn-small', text: 'Link to this order', onclick: () => linkConf(c, sel.value) }),
+        h('button', { class: 'btn-secondary btn-small', text: 'Ordered outside the app', onclick: () => addExternal(c, conf) }),
+        h('button', { class: 'btn-secondary btn-small', text: 'Ignore', onclick: () => { doneConf(c.id); renderConf(); } }))));
   });
 }
-async function linkConf(card, orderId) {
+// Merge the confirmation into the app's order card: rename, tick checklist, add summary, move to top of "To Be Delivered", archive the email card.
+async function linkConf(card, orderId, auto) {
   const o = orders.find(x => x.id === orderId);
   if (!o) return toast('Pick which order this confirmation belongs to.', true);
-  o.status = 'placed'; o.placedAt = cardTime(card.id); o.confirmation = { id: card.id, name: card.name, url: card.shortUrl };
-  matchedConf.push(card.id); LS.set('wb4_matched', matchedConf); saveOrders();
-  renderOrders(); updateCounters();
+  const conf = parseConf(card); const cmp = compareLines(o.lines, conf.lines);
+  o.status = 'placed'; o.placedAt = isoFromConfDate(conf.orderDate, cardTime(card.id));
+  o.confirmation = { id: card.id, num: conf.num, url: card.shortUrl, total: conf.total, delivery: conf.delivery, ref: conf.ref };
+  o.title = orderedName(o.title, conf.num); o.check = cmp;
+  doneConf(card.id); saveOrders(); renderOrders(); updateCounters();
   try {
-    await trello('POST', '/cards/' + o.cardId + '/actions/comments', { text: 'Order confirmed by supplier: ' + card.name + '\n' + card.shortUrl });
-    await trello('PUT', '/cards/' + o.cardId, { idList: cfg.listPlaced });
-    toast('Order marked as placed');
+    const cur = await trello('GET', '/cards/' + o.cardId, { fields: 'desc' });
+    await trello('PUT', '/cards/' + o.cardId, { name: o.title, idList: cfg.listPlaced, pos: 'top',
+      desc: summaryBlock(conf, card, cmp) + '\n\n---\n' + (cur.desc || '') });
+    const cls = await trello('GET', '/cards/' + o.cardId + '/checklists', {});
+    const confMap = new Map(conf.lines.map(l => [l.sku.toUpperCase(), l]));
+    for (const cl of cls) for (const it of (cl.checkItems || [])) {
+      const m = it.name.match(/^\d+\s*x\s+(\S+)\s+-/i); if (!m) continue;
+      const c = confMap.get(m[1].toUpperCase()); if (!c) continue;
+      const p = { state: 'complete' };
+      const appLine = o.lines.find(l => l.sku.toUpperCase() === m[1].toUpperCase());
+      if (appLine && appLine.qty !== c.qty) p.name = it.name + ' (CONFIRMED QTY ' + c.qty + ')';
+      await trello('PUT', '/cards/' + o.cardId + '/checkItem/' + it.id, p);
+    }
+    if (cmp.extra.length && cls[0]) for (const l of cmp.extra)
+      await trello('POST', '/checklists/' + cls[0].id + '/checkItems', { name: l.qty + ' x ' + l.sku + ' - ' + l.name + ' (on confirmation only)', checked: 'true' });
+    await trello('POST', '/cards/' + o.cardId + '/actions/comments', { text: (auto ? 'Matched automatically to ' : 'Matched to ') + 'supplier confirmation #' + conf.num + '\n' + comparisonText(cmp) });
+    await trello('PUT', '/cards/' + card.id, { closed: 'true' });
+    toast('Order #' + conf.num + ' confirmed' + (cmp.qtyDiff.length || cmp.missing.length || cmp.extra.length ? ' — check the differences' : ''), !!(cmp.qtyDiff.length || cmp.missing.length || cmp.extra.length));
   } catch (e) { toast('Marked placed here, but Trello update failed: ' + e.message, true); }
+  renderOrders();
+}
+// An order placed directly on the website: turn the confirmation card itself into the order card.
+async function addExternal(card, conf, auto) {
+  conf = conf || parseConf(card);
+  if (!conf.lines.length) return toast("Couldn't read the items from this email.", true);
+  const title = orderedName('Wilson & Bradley Hardware Order - ' + shortDate(conf.orderDate), conf.num);
+  const o = { id: 'o' + Date.now() + Math.floor(Math.random() * 1000), title, status: 'placed', external: true, createdAt: new Date().toISOString(),
+    sentAt: null, placedAt: isoFromConfDate(conf.orderDate, cardTime(card.id)), cardId: card.id, cardUrl: card.shortUrl,
+    lines: conf.lines.map(l => ({ sku: l.sku, name: l.name, qty: l.qty })),
+    confirmation: { id: card.id, num: conf.num, url: card.shortUrl, total: conf.total, delivery: conf.delivery, ref: conf.ref } };
+  orders.unshift(o); doneConf(card.id); saveOrders(); renderOrders(); updateCounters();
+  try {
+    await trello('PUT', '/cards/' + card.id, { name: title, idList: cfg.listPlaced, pos: 'top',
+      desc: summaryBlock(conf, card, null) + '\n\n_Ordered directly on the Wilson & Bradley website (not from the app)._\n\n---\n' + (card.desc || '') });
+    const cl = await trello('POST', '/checklists', { idCard: card.id, name: 'Hardware Items' });
+    for (const l of conf.lines) await trello('POST', '/checklists/' + cl.id + '/checkItems', { name: l.qty + ' x ' + l.sku + ' - ' + l.name, checked: 'true' });
+    toast((auto ? 'Added website order #' : 'Added order #') + conf.num);
+  } catch (e) { toast('Added here, but Trello update failed: ' + e.message, true); }
 }
 async function markPlaced(o) {
-  o.status = 'placed'; o.placedAt = new Date().toISOString(); saveOrders(); renderOrders(); updateCounters();
-  try { await trello('PUT', '/cards/' + o.cardId, { idList: cfg.listPlaced }); await trello('POST', '/cards/' + o.cardId + '/actions/comments', { text: 'Marked as placed ' + fmtDate(o.placedAt) }); }
+  o.status = 'placed'; o.placedAt = new Date().toISOString(); o.title = orderedName(o.title, ''); saveOrders(); renderOrders(); updateCounters();
+  try { await trello('PUT', '/cards/' + o.cardId, { name: o.title, idList: cfg.listPlaced, pos: 'top' }); await trello('POST', '/cards/' + o.cardId + '/actions/comments', { text: 'Marked as placed ' + fmtDate(o.placedAt) + ' (no confirmation email)' }); }
   catch (e) { toast('Marked placed here, but Trello update failed: ' + e.message, true); }
 }
 async function markDelivered(o) {
@@ -3025,7 +3157,7 @@ async function cancelOrder(o) {
 }
 function orderCard(o) {
   const lines = h('table', { class: 'simple' }, o.lines.map(l => h('tr', {}, h('td', { text: l.qty + ' ×' }), h('td', { class: 'sku', text: l.sku }), h('td', { text: l.name }))));
-  const dates = ['Sent ' + fmtDate(o.sentAt), o.placedAt ? 'Placed ' + fmtDate(o.placedAt) : '', o.deliveredAt ? 'Delivered ' + fmtDate(o.deliveredAt) : ''].filter(Boolean).join(' · ');
+  const dates = [o.external ? 'Ordered on website (not from app)' : 'Sent ' + fmtDate(o.sentAt), o.confirmation && o.confirmation.num ? 'Conf #' + o.confirmation.num : '', o.placedAt ? 'Placed ' + fmtDate(o.placedAt) : '', o.deliveredAt ? 'Delivered ' + fmtDate(o.deliveredAt) : ''].filter(Boolean).join(' · ');
   const acts = h('div', { class: 'order-actions' });
   if (o.status === 'sent') acts.append(h('button', { class: 'btn-secondary btn-small', text: 'Mark placed (no email)', onclick: () => markPlaced(o) }));
   if (o.status === 'sent' || o.status === 'placed') {
@@ -3037,7 +3169,8 @@ function orderCard(o) {
   if (o.confirmation) acts.append(h('a', { href: o.confirmation.url, target: '_blank', rel: 'noopener', style: 'align-self:center;font-weight:700', text: 'Confirmation email' }));
   return h('div', { class: 'card' },
     h('div', { class: 'order-head' }, h('div', { class: 't', text: o.title }), h('span', { class: 'chip ' + o.status, text: o.status })),
-    h('div', { class: 'muted', text: dates + ' · ' + o.lines.length + ' item(s)' }), acts,
+    h('div', { class: 'muted', text: dates + ' · ' + o.lines.length + ' item(s)' + (o.confirmation && o.confirmation.delivery ? ' · Delivery ' + o.confirmation.delivery : '') }),
+    o.check ? h('div', { class: 'muted', style: 'white-space:pre-line;margin-top:4px;color:' + (o.check.qtyDiff.length || o.check.missing.length || o.check.extra.length ? 'var(--warn)' : 'var(--ok)'), text: comparisonText(o.check) }) : null, acts,
     h('details', {}, h('summary', { text: 'Items' }), lines));
 }
 function renderOrders() {
@@ -3140,12 +3273,13 @@ $('fileImport').addEventListener('change', async e => {
 // ---------- boot ----------
 refreshCats(); updateCounters(); renderOrder();
 if (creds().key && cfg.listConf) refreshConf(true);
+setInterval(() => { if (creds().key && cfg.listConf) refreshConf(true); }, 5 * 60 * 1000);
 let deferredInstall = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; $('btnInstall').style.display = ''; });
 window.addEventListener('appinstalled', () => { $('btnInstall').style.display = 'none'; toast('App installed'); });
 $('btnInstall').addEventListener('click', async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $('btnInstall').style.display = 'none'; });
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
-window.__app = { handleScan, getDraft: () => draft, getOrders: () => orders, showView }; // used by tests
+window.__app = { handleScan, getDraft: () => draft, getOrders: () => orders, showView, parseConf, refreshConf }; // used by tests
 })();
 </script>
 </body>
