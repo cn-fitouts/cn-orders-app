@@ -128,16 +128,16 @@
   .lbl.outline { outline: 0.2mm dashed #999; outline-offset: -0.2mm; }
   .lbl .band { width: 4mm; flex: none; display: flex; align-items: center; justify-content: center; }
   .lbl .band span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 6.5pt; font-weight: 800; letter-spacing: .4mm; }
-  .lbl .pimg { width: 21mm; height: 21mm; flex: none; align-self: center; object-fit: contain; }
+  .lbl .pimg { width: 27mm; height: 27mm; flex: none; align-self: center; object-fit: contain; }
   .lbl .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 0.8mm; }
   .lbl .hd { font-size: 15pt; font-weight: 800; line-height: 1.05; letter-spacing: .1mm; }
   .lbl .hd.long { font-size: 10.5pt; line-height: 1.12; max-height: 12.2mm; overflow: hidden; }
   .lbl .sub { font-size: 8pt; font-weight: 700; }
-  .lbl .nm { font-size: 6.5pt; line-height: 1.15; max-height: 7.6mm; overflow: hidden; color: #333; }
-  .lbl .cd { font-size: 7pt; font-family: 'Courier New', monospace; color: #333; }
+  .lbl .nm { font-size: 6.5pt; font-weight: 700; line-height: 1.15; max-height: 7.6mm; overflow: hidden; color: #222; }
+  .lbl .cd { font-size: 7.5pt; font-weight: 700; font-family: 'Courier New', monospace; color: #000; }
   .lbl .right { width: 21mm; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6mm; }
   .lbl .qr { width: 19mm; height: 19mm; } .lbl .qr svg { width: 100%; height: 100%; display: block; }
-  .lbl .qty { box-sizing: border-box; width: 19mm; border: 0.35mm solid #000; border-radius: 1mm; display: flex; align-items: baseline; justify-content: center; gap: 0.8mm; padding: 0.2mm 0.5mm; line-height: 1.1; white-space: nowrap; overflow: hidden; }
+  .lbl .qty { box-sizing: border-box; width: 19mm; border: 0.35mm solid #000; border-radius: 1mm; display: flex; align-items: center; justify-content: center; gap: 0.8mm; height: 7mm; padding: 0 0.5mm; line-height: 1; white-space: nowrap; overflow: hidden; }
   .lbl .qty small { font-size: 6pt; font-weight: 700; }
   .lbl .qty b { font-weight: 800; }
   @media print {
@@ -175,7 +175,8 @@
     <!-- ORDER (browse) -->
     <div class="view active" id="view-order">
       <div class="subtabs">
-        <button class="subtab active" id="tabQuick">Quick Order &middot; Top 100</button>
+        <button class="subtab active" id="tabQuick">Quick Order</button>
+        <button class="subtab" id="tabRecent">Most Recent</button>
         <button class="subtab" id="tabFull">Full Catalogue &middot; 6,503 items</button>
       </div>
       <div class="controls">
@@ -2799,7 +2800,18 @@ $('btnNewOrder').addEventListener('click', async () => {
 let browseView = 'quick';
 const collapsed = new Set();
 let searchTimer;
-function activeItems() { return browseView === 'quick' ? TOP_ITEMS : ALL_ITEMS; }
+// Items from past orders, newest first, with when/how many they were last ordered.
+function recentItems() {
+  const seen = new Map();
+  orders.filter(o => o.status !== 'cancelled').map(o => ({ o, d: o.placedAt || o.sentAt || o.createdAt || '' }))
+    .sort((a, b) => (b.d > a.d ? 1 : -1)).forEach(({ o, d }) => o.lines.forEach(l => {
+      const k = l.sku.toUpperCase(); if (seen.has(k)) return;
+      const it = BY_SKU.get(k) || { sku: l.sku, name: l.name, cat: 'Other' };
+      seen.set(k, Object.assign({}, it, { lastDate: d, lastQty: l.qty }));
+    }));
+  return [...seen.values()];
+}
+function activeItems() { return browseView === 'quick' ? LABEL_ITEMS : browseView === 'recent' ? recentItems() : ALL_ITEMS; }
 function refreshCats() {
   const cats = [...new Set(activeItems().map(i => i.cat))].sort();
   const sel = $('catFilter'), prev = sel.value;
@@ -2811,10 +2823,12 @@ function setBrowse(v) {
   browseView = v; collapsed.clear();
   $('tabQuick').classList.toggle('active', v === 'quick');
   $('tabFull').classList.toggle('active', v === 'full');
+  $('tabRecent').classList.toggle('active', v === 'recent');
   refreshCats(); renderOrder();
 }
 $('tabQuick').addEventListener('click', () => setBrowse('quick'));
 $('tabFull').addEventListener('click', () => setBrowse('full'));
+$('tabRecent').addEventListener('click', () => setBrowse('recent'));
 $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderOrder, 120); });
 $('catFilter').addEventListener('change', renderOrder);
 
@@ -2830,17 +2844,18 @@ function renderOrder() {
     matched++; (grouped[i.cat] = grouped[i.cat] || []).push(i);
   });
   if (!matched) {
-    const e = h('div', { class: 'empty' }, browseView === 'quick' ? "Nothing in the Top 100 matches — it's probably in the full catalogue." : 'No items match that search.');
+    const e = h('div', { class: 'empty' }, browseView === 'quick' ? "Nothing in Quick Order matches — it's probably in the full catalogue." : browseView === 'recent' && !orders.length ? 'No orders yet — items you order will show here.' : 'No items match that search.');
     if (browseView === 'quick') e.append(h('br'), h('button', { class: 'btn-primary', text: 'Search Full Catalogue →', onclick: () => setBrowse('full') }));
     box.append(e); updateCounters(); return;
   }
+  if (browseView === 'recent') { const all = []; Object.values(grouped).forEach(a => all.push(...a)); all.sort((a, b) => (b.lastDate > a.lastDate ? 1 : -1)); Object.keys(grouped).forEach(k => delete grouped[k]); grouped['Recently ordered (newest first)'] = all; }
   Object.keys(grouped).sort().forEach(cn => {
     const items = grouped[cn];
     const sel = items.filter(i => lineMap.has(i.sku.toUpperCase())).length;
     const head = h('div', { class: 'category-header', onclick: () => { collapsed.has(cn) ? collapsed.delete(cn) : collapsed.add(cn); renderOrder(); } },
       h('span', { text: cn }), h('span', { class: 'count', text: items.length + ' items' + (sel ? ' · ' + sel + ' in order' : '') }));
     const wrap = h('div', { class: 'items' + (collapsed.has(cn) ? ' collapsed' : '') });
-    const cap = (tokens.length || cat || browseView === 'quick') ? items.length : 150;
+    const cap = (tokens.length || cat || browseView !== 'full') ? items.length : 150;
     items.slice(0, cap).forEach(item => {
       const line = lineMap.get(item.sku.toUpperCase());
       const cb = h('input', { type: 'checkbox', checked: !!line, onchange: async e => {
@@ -2851,9 +2866,9 @@ function renderOrder() {
         const v = parseInt(e.target.value, 10); const l = draft.lines.find(x => x.sku.toUpperCase() === item.sku.toUpperCase());
         if (l && v > 0) { l.qty = v; saveDraft(); }
       } });
-      const row = h('div', { class: 'item-row' + (browseView === 'quick' ? '' : ' noq12') + (line ? ' checked' : '') },
+      const row = h('div', { class: 'item-row' + (browseView === 'recent' ? '' : ' noq12') + (line ? ' checked' : '') },
         cb, thumb(item.sku), h('div', { class: 'sku', text: item.sku }), h('div', { class: 'name', text: item.name }),
-        browseView === 'quick' ? h('div', { class: 'q12', text: item.qty12 + ' / 12mo' }) : null, q);
+        browseView === 'recent' ? h('div', { class: 'q12', text: 'Last ' + (item.lastDate ? fmtDate(item.lastDate).split(',')[0] : '') + ' · ' + item.lastQty }) : null, q);
       wrap.append(row);
     });
     if (items.length > cap) wrap.append(h('div', { class: 'empty', text: '+ ' + (items.length - cap) + ' more — search or filter to narrow down' }));
