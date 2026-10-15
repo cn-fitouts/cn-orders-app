@@ -82,7 +82,7 @@
   .scan-hero { text-align: center; padding: 22px 12px; border-radius: 14px; background: var(--card); border: 2px dashed var(--brand); margin-bottom: 14px; }
   .scan-hero .big { font-size: 22px; font-weight: 800; color: var(--brand-ink); }
   #scanInput { width: min(420px, 90%); text-align: center; font-size: 18px; margin-top: 10px; }
-  #scanFeedback { margin-top: 12px; padding: 14px; border-radius: 10px; font-size: 18px; font-weight: 700; min-height: 56px; background: var(--bg); color: var(--mut); }
+  #scanFeedback { white-space: pre-line; margin-top: 12px; padding: 14px; border-radius: 10px; font-size: 18px; font-weight: 700; min-height: 56px; background: var(--bg); color: var(--mut); }
   #scanFeedback.ok { background: var(--ok-lt); color: var(--ok); }
   #scanFeedback.err { background: var(--err-lt); color: var(--err); }
   #scanFeedback.skip { background: var(--warn-lt); color: var(--warn); }
@@ -2909,14 +2909,21 @@ function parseScan(raw) {
 function feedback(msg, cls) { const f = $('scanFeedback'); f.textContent = msg; f.className = cls || ''; }
 async function handleScan(raw) {
   if (modalOpen) return;
-  const code = parseScan(raw);
-  const item = BY_SKU.get(code.toUpperCase());
-  if (!item) { beep(180, 0.35, 'sawtooth'); buzz(300); feedback('✗ Unknown code: ' + code, 'err'); return; }
-  const qty = getDefQty(item.sku);
-  const added = await requestAdd(item, qty);
-  const line = draft.lines.find(l => l.sku.toUpperCase() === item.sku.toUpperCase());
-  if (added) { beep(880, 0.12); buzz(40); feedback('✓ ' + item.name + '  × ' + qty + (line && line.qty !== qty ? '  (total ' + line.qty + ')' : ''), 'ok'); }
-  else feedback('Skipped (duplicate): ' + item.name, 'skip');
+  // One QR can hold several codes joined with "+" (e.g. a bulk LEFT + RIGHT pack pair) - add each one.
+  const codes = parseScan(raw).split(/[+=,\/\s]+/).filter(Boolean);
+  const items = codes.map(c => ({ c, item: BY_SKU.get(c.toUpperCase()) }));
+  const bad = items.filter(x => !x.item);
+  if (!items.length || bad.length) { beep(180, 0.35, 'sawtooth'); buzz(300); feedback('✗ Unknown code: ' + (bad.length ? bad.map(x => x.c).join(', ') : raw), 'err'); return; }
+  const msgs = []; let anyAdded = false, anySkipped = false;
+  for (const { item } of items) {
+    const qty = getDefQty(item.sku);
+    const added = await requestAdd(item, qty);
+    const line = draft.lines.find(l => l.sku.toUpperCase() === item.sku.toUpperCase());
+    if (added) { anyAdded = true; msgs.push('✓ ' + item.name + '  × ' + qty + (line && line.qty !== qty ? '  (total ' + line.qty + ')' : '')); }
+    else { anySkipped = true; msgs.push('Skipped (duplicate): ' + item.name); }
+  }
+  if (anyAdded) { beep(880, 0.12); buzz(40); }
+  feedback(msgs.join('\n'), anyAdded ? 'ok' : 'skip');
   renderScan(); focusScan();
 }
 function renderScan() {
