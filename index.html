@@ -231,7 +231,7 @@
           <button class="btn-primary" id="lblPrint">Print selected labels</button>
         </div>
         <div class="muted" style="margin-top:6px">A4 sheet, 16 labels (2 × 8). Each label shows the photo, name, code, QR and default qty — if you change a qty later, reprint that label. Use "Skip first" to finish a part-used sheet. Print at 100% / "Actual size", no margins.</div>
-        <details style="margin-top:8px"><summary>Sheet setup (mm) — set for Avery L7162 / 99.1 × 33.9</summary>
+        <details style="margin-top:8px"><summary>Sheet setup (mm) — defaults match your tested 16-per-sheet stickers</summary>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px" id="sheetCfg"></div>
         </details>
       </div>
@@ -3267,7 +3267,7 @@ function labelInfo(item) {
   }
   return { head: head ? head.replace(/\s+/g, ' ').trim() : null, hl, sub, finish: f, name: cleanName(n) };
 }
-function sheetCfg() { return Object.assign({ top: 12.9, left: 4.65, w: 99.1, h: 33.9, gapX: 2.5, gapY: 0 }, cfg.sheet || {}); }
+function sheetCfg() { return Object.assign({ top: 1.8, left: 1.5, w: 103, h: 34.5, gapX: 2.5, gapY: 2.5 }, cfg.sheet || {}); }
 function renderSheetCfg() {
   const box = $('sheetCfg'); if (!box || box.childElementCount) return; const s = sheetCfg();
   [['top', 'Top margin'], ['left', 'Left margin'], ['w', 'Label width'], ['h', 'Label height'], ['gapX', 'Gap between columns'], ['gapY', 'Gap between rows']].forEach(([k, lab]) =>
