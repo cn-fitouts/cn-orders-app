@@ -59,8 +59,18 @@
   .category-header .count { opacity: .75; font-weight: 600; }
   .items.collapsed { display: none; }
   .thumb { width: 48px; height: 48px; object-fit: contain; background: #fff; border-radius: 6px; }
-  .item-row { display: grid; grid-template-columns: 34px 48px 120px 1fr 96px 74px; gap: 10px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--bg); }
-  .item-row.noq12 { grid-template-columns: 34px 48px 120px 1fr 74px; }
+  .item-row { display: grid; grid-template-columns: 34px 48px 120px 1fr 120px 150px; gap: 10px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--bg); }
+  .item-row.noq12 { grid-template-columns: 34px 48px 120px 1fr 150px; }
+  .item-row .stepper input { width: 62px; }
+  .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .dash-grid .card { margin: 0; }
+  .drow { display: grid; grid-template-columns: 48px 1fr auto; gap: 10px; align-items: center; padding: 8px 2px; border-top: 1px solid var(--bg); }
+  .drow.noimg { grid-template-columns: 1fr auto; }
+  .drow .t { font-weight: 700; } .drow .m { font-size: 13px; color: var(--mut); }
+  .bignum { font-size: 34px; font-weight: 800; color: var(--brand-ink); }
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .stats .card { flex: 1; min-width: 150px; margin: 0; text-align: center; cursor: pointer; }
+  @media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
   .item-row.checked { background: var(--brand-lt); }
   .item-row input[type=checkbox] { width: 24px; height: 24px; }
   .sku { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: var(--mut); }
@@ -140,6 +150,23 @@
   .lbl .qr { width: 19mm; height: 19mm; } .lbl .qr svg { width: 100%; height: 100%; display: block; }
   .lbl .qty { box-sizing: border-box; width: 19mm; border: 0.35mm solid #000; border-radius: 1mm; display: flex; align-items: center; justify-content: center; gap: 0.8mm; height: 7mm; padding: 0 0.5mm; line-height: 1; white-space: nowrap; overflow: hidden; }
   .lbl .qty small { font-size: 6pt; font-weight: 700; }
+  .lbl.big { padding: 0; }
+  .lbl.big .bin { box-sizing: border-box; width: 100%; height: 100%; padding: 4mm 4.5mm; display: flex; flex-direction: column; gap: 2mm; overflow: hidden; }
+  .lbl.big.outline .bin { outline: 0.2mm dashed #999; outline-offset: -0.2mm; }
+  .lbl.big .strip { flex: none; height: 6mm; border-radius: 1mm; display: flex; align-items: center; padding: 0 2.5mm; font-size: 10pt; font-weight: 800; letter-spacing: .6mm; }
+  .lbl.big .top { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 1.2mm; overflow: hidden; }
+  .lbl.big .hd { font-size: 24pt; line-height: 1.05; max-height: none; }
+  .lbl.big .hd .hl { border-radius: 1.2mm; padding: 0 1.6mm; }
+  .lbl.big .hd.long { font-weight: 800; font-size: 15pt; line-height: 1.15; max-height: 21mm; overflow: hidden; }
+  .lbl.big .sub { font-size: 12pt; }
+  .lbl.big .nm { font-size: 8.5pt; max-height: 7.6mm; line-height: 1.15; }
+  .lbl.big .bot { flex: none; height: 31mm; display: flex; align-items: center; gap: 3mm; }
+  .lbl.big .pimg { width: 31mm; height: 31mm; }
+  .lbl.big .mid { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: space-between; align-items: stretch; padding: 1mm 0; box-sizing: border-box; }
+  .lbl.big .cd { font-size: 14pt; text-align: center; overflow-wrap: anywhere; }
+  .lbl.big .qty { width: 100%; height: 12mm; border-width: 0.5mm; gap: 1.5mm; }
+  .lbl.big .qty small { font-size: 9pt; }
+  .lbl.big .qr { width: 31mm; height: 31mm; flex: none; }
   .lbl .qty b { font-weight: 800; }
   @media print {
     @page { size: A4; margin: 0; }
@@ -151,7 +178,7 @@
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
   @media (max-width: 760px) {
-    .item-row, .item-row.noq12 { grid-template-columns: 34px 48px 1fr 74px; }
+    .item-row, .item-row.noq12 { grid-template-columns: 34px 48px 1fr 150px; }
     .item-row .sku, .item-row .q12 { grid-column: 3; }
     .lbl-row { grid-template-columns: 34px 48px 1fr 90px; } .lbl-row .qrp { display: none; }
   }
@@ -165,16 +192,32 @@
     <button class="btn-new" id="btnNewOrder">+ New Order</button>
   </div>
   <div class="nav" id="nav">
-    <button data-view="order" class="active">Order</button>
+    <button data-view="dash" class="active">Dashboard</button>
+    <button data-view="order">Order</button>
     <button data-view="scan">Scan <span class="pill" id="pillScan">0</span></button>
     <button data-view="orders">Orders <span class="pill" id="pillOrders">0</span></button>
-    <button data-view="labels">Labels &amp; Qty</button>
     <button data-view="settings">Settings</button>
   </div>
 
   <div class="wrap">
+    <!-- DASHBOARD -->
+    <div class="view active" id="view-dash">
+      <div class="stats">
+        <div class="card" data-go="orders"><div class="bignum" id="sAwait">0</div><div class="muted">Awaiting delivery</div></div>
+        <div class="card" data-go="orders"><div class="bignum" id="sBack">0</div><div class="muted">Items on backorder</div></div>
+        <div class="card" data-go="orders"><div class="bignum" id="sDel">0</div><div class="muted">Delivered (last 30 days)</div></div>
+        <div class="card" data-go="order"><div class="bignum" id="sDraft">0</div><div class="muted">Items in current order</div></div>
+      </div>
+      <div class="dash-grid">
+        <div class="card"><h2>Awaiting delivery</h2><div id="dAwait"></div></div>
+        <div class="card"><h2>On backorder</h2><div class="muted" style="margin-bottom:4px">From the supplier's confirmation emails.</div><div id="dBack"></div></div>
+        <div class="card"><h2>Recently delivered</h2><div id="dDel"></div></div>
+        <div class="card"><h2>Most ordered items</h2><div class="muted" id="dTopNote" style="margin-bottom:4px"></div><div id="dTop"></div></div>
+      </div>
+    </div>
+
     <!-- ORDER (browse) -->
-    <div class="view active" id="view-order">
+    <div class="view" id="view-order">
       <div class="subtabs">
         <button class="subtab active" id="tabQuick">Quick Order</button>
         <button class="subtab" id="tabRecent">Most Recent</button>
@@ -192,13 +235,13 @@
     <div class="view" id="view-scan">
       <div class="scan-hero">
         <div class="big" id="scanTitle">Scan items</div>
-        <div class="muted">Scan each item's QR sticker. Quantity comes from the item's saved default (edit under Labels &amp; Qty).</div>
+        <div class="muted">Scan each item's QR sticker. Quantity comes from the item's saved default (Settings &rarr; Labels &amp; quantities).</div>
         <input type="text" id="scanInput" inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Scanner input">
         <div><button class="btn-secondary btn-small" id="btnKbd" style="margin-top:8px">Use on-screen keyboard</button></div>
         <div id="scanFeedback">Ready &mdash; scan an item.</div>
       </div>
       <div class="card">
-        <h2>In this order <span class="muted" id="scanCount"></span></h2>
+        <h2 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">In this order <span class="muted" id="scanCount"></span><button class="btn-warn btn-small" id="btnUndo" style="display:none;margin-left:auto">&#8630; Undo remove</button></h2>
         <div id="scanLines"></div>
         <div style="margin-top:12px"><button class="btn-primary" id="btnDoneScan">Done &mdash; review &amp; send</button></div>
       </div>
@@ -221,6 +264,7 @@
     <!-- LABELS -->
     <div class="view" id="view-labels">
       <div class="card">
+        <div style="margin-bottom:8px"><button class="btn-secondary btn-small" id="btnLblBack">&larr; Back to Settings</button></div>
         <h2>QR stickers &amp; default quantities</h2>
         <div class="muted">Each QR code contains only the item code (as <b>CNF:code</b>). The quantity is stored here on the tablet, so you can change it any time without reprinting the sticker.</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">
@@ -240,6 +284,16 @@
 
     <!-- SETTINGS -->
     <div class="view" id="view-settings">
+      <div class="card">
+        <h2>Labels &amp; default quantities</h2>
+        <div class="muted" style="margin-bottom:8px">Print QR stickers and change the quantity each sticker adds.</div>
+        <button class="btn-primary" id="btnOpenLabels">Open labels &amp; quantities</button>
+      </div>
+      <div class="card">
+        <h2>Settings PIN <span class="muted" id="pinState"></span></h2>
+        <div class="muted" style="margin-bottom:8px">Optional. When set, Settings (including labels &amp; quantities) asks for this PIN once each time the app is opened.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="pinNew" inputmode="numeric" placeholder="New PIN (leave blank to remove)" style="width:240px"><button class="btn-secondary" id="pinSave">Save PIN</button></div>
+      </div>
       <div class="card">
         <h2>Trello connection <span class="muted" id="trelloState"></span></h2>
         <div id="trelloSetup">
@@ -2759,14 +2813,22 @@ function removeLine(sku) {
 }
 
 // ---------- navigation ----------
-let currentVw = 'order';
+let currentVw = 'dash';
+let pinOk = false;
 let wakeLock = null;
 function showView(v) {
+  if ((v === 'settings' || v === 'labels') && cfg.pin && !pinOk) {
+    const entered = window.prompt('Enter the Settings PIN');
+    if (entered === null) return;
+    if (entered.trim() !== String(cfg.pin)) { toast('Wrong PIN', true); return; }
+    pinOk = true;
+  }
   currentVw = v;
   document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === 'view-' + v));
-  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === (v === 'labels' ? 'settings' : v)));
   $('footer').classList.toggle('show', v === 'order' || v === 'scan');
   if (v === 'order') renderOrder();
+  if (v === 'dash') renderDash();
   if (v === 'scan') { renderScan(); focusScan(); try { navigator.wakeLock && navigator.wakeLock.request('screen').then(w => { wakeLock = w; }).catch(() => {}); } catch (e) {} }
   else if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
   if (v === 'orders') { renderOrders(); if (creds().key && cfg.listConf) refreshConf(true); }
@@ -2788,6 +2850,7 @@ function updateCounters() {
 $('cardTitle').addEventListener('input', () => { draft.title = $('cardTitle').value; saveDraft(); });
 
 $('btnNewOrder').addEventListener('click', async () => {
+  removedStack.length = 0;
   if (draft.lines.length) {
     const fresh = await modal({
       title: 'Start a new order?', tone: 'info',
@@ -2865,10 +2928,22 @@ function renderOrder() {
         if (e.target.checked) { await requestAdd(item, getDefQty(item.sku)); } else removeLine(item.sku);
         renderOrder();
       } });
-      const q = h('input', { type: 'number', min: '1', class: 'qty', value: line ? line.qty : getDefQty(item.sku), disabled: !line, oninput: e => {
-        const v = parseInt(e.target.value, 10); const l = draft.lines.find(x => x.sku.toUpperCase() === item.sku.toUpperCase());
-        if (l && v > 0) { l.qty = v; saveDraft(); }
+      const findL = () => draft.lines.find(x => x.sku.toUpperCase() === item.sku.toUpperCase());
+      const step = async d => {
+        const l = findL();
+        if (!l) { if (d > 0) await requestAdd(item, getDefQty(item.sku)); }
+        else if (l.qty + d <= 0) removeLine(item.sku);
+        else { l.qty += d; saveDraft(); }
+        renderOrder();
+      };
+      const qi = h('input', { type: 'number', min: '1', value: line ? line.qty : getDefQty(item.sku), onchange: async e => {
+        const v = parseInt(e.target.value, 10); const l = findL();
+        if (!(v > 0)) { if (l) removeLine(item.sku); renderOrder(); return; }
+        if (l) { l.qty = v; saveDraft(); } else await requestAdd(item, v);
+        renderOrder();
       } });
+      if (!line) qi.style.color = 'var(--mut)';
+      const q = h('div', { class: 'stepper' }, h('button', { text: '−', 'aria-label': 'Less', onclick: () => step(-1) }), qi, h('button', { text: '+', 'aria-label': 'More', onclick: () => step(1) }));
       const row = h('div', { class: 'item-row' + (browseView === 'recent' ? '' : ' noq12') + (line ? ' checked' : '') },
         cb, thumb(item.sku), h('div', { class: 'sku', text: item.sku }), h('div', { class: 'name', text: item.name }),
         browseView === 'recent' ? h('div', { class: 'q12', text: 'Last ' + (item.lastDate ? fmtDate(item.lastDate).split(',')[0] : '') + ' · ' + item.lastQty }) : null, q);
@@ -2926,7 +3001,16 @@ async function handleScan(raw) {
   feedback(msgs.join('\n'), anyAdded ? 'ok' : 'skip');
   renderScan(); focusScan();
 }
+const removedStack = [];
+$('btnUndo').addEventListener('click', () => {
+  const r = removedStack.pop(); if (!r) return;
+  const ex = draft.lines.find(x => x.sku.toUpperCase() === r.line.sku.toUpperCase());
+  if (ex) ex.qty += r.line.qty; else draft.lines.splice(Math.min(Math.max(r.idx, 0), draft.lines.length), 0, r.line);
+  saveDraft(); renderScan(); toast('Restored ' + r.line.name); focusScan();
+});
 function renderScan() {
+  const u = $('btnUndo'); const last = removedStack[removedStack.length - 1];
+  u.style.display = last ? '' : 'none'; if (last) u.textContent = '↶ Undo remove: ' + (last.line.name.length > 34 ? last.line.name.slice(0, 32) + '…' : last.line.name);
   $('scanTitle').textContent = draft.title;
   $('scanCount').textContent = '— ' + draft.lines.length + ' item(s)';
   const box = $('scanLines'); box.innerHTML = '';
@@ -2938,7 +3022,7 @@ function renderScan() {
       h('div', { class: 'stepper' },
         h('button', { text: '−', onclick: () => { if (l.qty > 1) { l.qty--; saveDraft(); renderScan(); } } }), inp,
         h('button', { text: '+', onclick: () => { l.qty++; saveDraft(); renderScan(); } })),
-      h('button', { class: 'btn-secondary', text: '✕', 'aria-label': 'Remove', onclick: () => { removeLine(l.sku); renderScan(); } })));
+      h('button', { class: 'btn-secondary', text: '✕', 'aria-label': 'Remove', onclick: () => { removedStack.push({ line: Object.assign({}, l), idx: draft.lines.indexOf(l) }); removeLine(l.sku); renderScan(); } })));
   });
   updateCounters();
 }
@@ -3042,13 +3126,15 @@ function parseConf(card) {
   const delivery = (d.match(/Delivery\/Pickup date:\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})/i) || [])[1] || '';
   const total = (d.match(/Total \(inc GST\):\s*\$([\d,.]+)/i) || [])[1] || '';
   const ref = ((d.match(/Debtor order number:\s*(.*?)\s+Order date:/i) || [])[1] || '').trim();
-  const lines = []; const re = /\/p\/([^>\s]+)>\s+([^\s<]+)\s+\$([\d,.]+)\s+(\d+)\s+\$([\d,.]+)/g; let m;
+  const lines = []; const re = /\/p\/([^>\s]+)>\s+([^\s<]+)\s+\$([\d,.]+)\s+(\d+)\s+\$([\d,.]+)([^<]*?)(?=<|Order Summary|$)/g; let m;
   while ((m = re.exec(d))) {
     let sku = m[2]; try { sku = decodeURIComponent(sku); } catch (e) {}
     const item = BY_SKU.get(sku.toUpperCase());
     const esc = m[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const nm = (d.match(new RegExp('/p/' + esc + '>\\s+([^\\n<]+?)\\s*\\n')) || [])[1];
-    lines.push({ sku: item ? item.sku : sku, qty: parseInt(m[4], 10), name: item ? item.name : (nm || sku), price: m[3], lineTotal: m[5] });
+    const expected = (m[6] || '').replace(/\s+/g, ' ').trim();
+    const backorder = /back\s*-?\s*order|\d{1,2}\s+[A-Za-z]{3,}\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}/i.test(expected);
+    lines.push({ sku: item ? item.sku : sku, qty: parseInt(m[4], 10), name: item ? item.name : (nm || sku), price: m[3], lineTotal: m[5], expected: expected.replace(/^[—–-]$/, ''), backorder });
   }
   return { num, orderDate, delivery, total, ref, lines };
 }
@@ -3083,7 +3169,8 @@ function summaryBlock(conf, card, cmp) {
     'Reference: ' + (conf.ref || '-') + '  |  Total (inc GST): $' + (conf.total || '-'),
     'Confirmation email: ' + card.shortUrl, '',
     cmp ? comparisonText(cmp) : '', '',
-    '**Confirmed items**', ...conf.lines.map(l => '- ' + l.qty + ' x ' + l.sku + ' - ' + l.name + ' ($' + l.lineTotal + ')')].join('\n');
+    conf.lines.some(l => l.backorder) ? '⏳ BACKORDER: ' + conf.lines.filter(l => l.backorder).map(l => l.qty + ' x ' + l.sku + ' (' + l.expected + ')').join(', ') : '', '',
+    '**Confirmed items**', ...conf.lines.map(l => '- ' + l.qty + ' x ' + l.sku + ' - ' + l.name + ' ($' + l.lineTotal + ')' + (l.backorder ? ' — BACKORDER ' + l.expected : ''))].join('\n');
 }
 const orderedName = (title, num) => 'ORDERED - ' + title.replace(/^ORDERED - /, '').replace(/ - #\d+$/, '') + (num ? ' - #' + num : '');
 function doneConf(id) { if (!matchedConf.includes(id)) { matchedConf.push(id); LS.set('wb4_matched', matchedConf); } }
@@ -3094,7 +3181,7 @@ async function refreshConf(quiet) {
   try {
     confCards = await trello('GET', '/lists/' + cfg.listConf + '/cards', { fields: 'name,desc,shortUrl' });
     await autoProcess();
-    renderConf();
+    renderConf(); if (currentVw === 'dash') renderDash();
     if (!quiet) toast('Confirmations refreshed');
   } catch (e) { if (!quiet) toast(e.message, true); renderConf(); }
   finally { confBusy = false; }
@@ -3141,6 +3228,7 @@ async function linkConf(card, orderId, auto) {
   o.status = 'placed'; o.placedAt = isoFromConfDate(conf.orderDate, cardTime(card.id));
   o.confirmation = { id: card.id, num: conf.num, url: card.shortUrl, total: conf.total, delivery: conf.delivery, ref: conf.ref };
   o.title = orderedName(o.title, conf.num); o.check = cmp;
+  o.backorders = conf.lines.filter(l => l.backorder).map(l => ({ sku: l.sku, name: l.name, qty: l.qty, expected: l.expected }));
   doneConf(card.id); saveOrders(); renderOrders(); updateCounters();
   try {
     const cur = await trello('GET', '/cards/' + o.cardId, { fields: 'desc' });
@@ -3172,6 +3260,7 @@ async function addExternal(card, conf, auto) {
   const o = { id: 'o' + Date.now() + Math.floor(Math.random() * 1000), title, status: 'placed', external: true, createdAt: new Date().toISOString(),
     sentAt: null, placedAt: isoFromConfDate(conf.orderDate, cardTime(card.id)), cardId: card.id, cardUrl: card.shortUrl,
     lines: conf.lines.map(l => ({ sku: l.sku, name: l.name, qty: l.qty })),
+    backorders: conf.lines.filter(l => l.backorder).map(l => ({ sku: l.sku, name: l.name, qty: l.qty, expected: l.expected })),
     confirmation: { id: card.id, num: conf.num, url: card.shortUrl, total: conf.total, delivery: conf.delivery, ref: conf.ref } };
   orders.unshift(o); doneConf(card.id); saveOrders(); renderOrders(); updateCounters();
   try {
@@ -3282,8 +3371,19 @@ function renderSheetCfg() {
 }
 // Colour per drawer height and runner weight (all different, all readable with white text).
 const HL_COLOURS = { N: '#334155', M: '#1d4ed8', K: '#15803d', C: '#ea580c', F: '#7e22ce', '30KG': '#475569', '40KG': '#dc2626', '60KG': '#a16207', '70KG': '#0e7490' };
-function qtyBox(q) { const s = String(q); return h('div', { class: 'qty' }, h('small', { text: 'QTY' }), h('b', { text: s, style: 'font-size:' + (s.length <= 2 ? 13 : s.length === 3 ? 11.5 : 9.5) + 'pt' })); }
-function buildLabel(item, outline) {
+function qtyBox(q, big) { const s = String(q), k = big ? 1.65 : 1; return h('div', { class: 'qty' }, h('small', { text: 'QTY' }), h('b', { text: s, style: 'font-size:' + (k * (s.length <= 2 ? 13 : s.length === 3 ? 11.5 : 9.5)) + 'pt' })); }
+function buildBigLabel(item, outline) {
+  const info = labelInfo(item), f = info.finish;
+  const strip = f && f.k !== 'STAINLESS' ? h('div', { class: 'strip', text: f.k, style: 'background:' + f.bg + ';color:' + f.fg + (f.border ? ';box-shadow:inset 0 0 0 0.35mm ' + f.border : '') }) : null;
+  const top = info.head
+    ? h('div', { class: 'top' }, h('div', { class: 'hd' }, info.head, info.hl ? ' ' : null, info.hl ? h('span', { class: 'hl', text: info.hl, style: 'background:' + (HL_COLOURS[info.hl] || '#000') }) : null), info.sub ? h('div', { class: 'sub', text: info.sub }) : null, h('div', { class: 'nm', text: info.name }))
+    : h('div', { class: 'top' }, h('div', { class: 'hd long', text: info.name.replace(/\s+([,.])/g, '$1') }));
+  const qr = h('div', { class: 'qr' }); qr.innerHTML = qrSvg(item.sku);
+  const bot = h('div', { class: 'bot' }, h('img', { class: 'pimg', alt: '', src: imgUrl(item.sku) }), h('div', { class: 'mid' }, h('div', { class: 'cd', text: item.sku }), qtyBox(getDefQty(item.sku), true)), qr);
+  return h('div', { class: 'lbl big' + (outline ? ' outline' : '') }, h('div', { class: 'bin' }, strip, top, bot));
+}
+function buildLabel(item, outline, big) {
+  if (big) return buildBigLabel(item, outline);
   const info = labelInfo(item), f = info.finish;
   const band = h('div', { class: 'band', style: f ? 'background:' + f.bg + ';color:' + f.fg + (f.border ? ';box-shadow:inset 0 0 0 0.3mm ' + f.border : '') : 'background:#fff' }, f ? h('span', { text: f.k }) : null);
   const img = h('img', { class: 'pimg', alt: '', src: imgUrl(item.sku) });
@@ -3291,7 +3391,7 @@ function buildLabel(item, outline) {
     ? h('div', { class: 'txt' }, h('div', { class: 'hd' }, info.head, info.hl ? ' ' : null, info.hl ? h('span', { class: 'hl', text: info.hl, style: 'background:' + (HL_COLOURS[info.hl] || '#000') }) : null), info.sub ? h('div', { class: 'sub', text: info.sub }) : null, h('div', { class: 'nm', text: info.name }), h('div', { class: 'cd', text: item.sku }))
     : h('div', { class: 'txt' }, h('div', { class: 'hd long', text: info.name }), h('div', { class: 'cd', text: item.sku }));
   const qr = h('div', { class: 'qr' }); qr.innerHTML = qrSvg(item.sku);
-  return h('div', { class: 'lbl' + (outline ? ' outline' : '') }, h('div', { class: 'in' }, band, img, txt, h('div', { class: 'right' }, qr, qtyBox(getDefQty(item.sku)))));
+  return h('div', { class: 'lbl' + (outline ? ' outline' : '') + (big ? ' big' : '') }, h('div', { class: 'in' }, band, img, txt, h('div', { class: 'right' }, qr, qtyBox(getDefQty(item.sku), big))));
 }
 function renderLabels() {
   renderSheetCfg();
@@ -3315,25 +3415,66 @@ $('lblPrint').addEventListener('click', async () => {
   const items = LABEL_ITEMS.filter(i => labelSel.has(i.sku));
   if (!items.length) return toast('Select at least one label.', true);
   const s = sheetCfg(), skip = Math.max(0, Math.min(15, parseInt($('lblSkip').value, 10) || 0)), outline = $('lblOutline').checked;
+  await buildSheets(items, s, { skip, outline, cols: 2, rows: 8 });
+  window.print();
+});
+// Lay labels out on A4 sheets. Larger labels (e.g. 8 per page) automatically use the "big" design.
+async function buildSheets(items, s, o) {
+  const per = o.cols * o.rows, big = s.h > 50;
   const pa = $('printArea'); pa.innerHTML = '';
-  const slots = new Array(skip).fill(null).concat(items);
-  for (let p = 0; p < slots.length; p += 16) {
+  const slots = new Array(o.skip || 0).fill(null).concat(items);
+  for (let p = 0; p < slots.length; p += per) {
     const sheet = h('div', { class: 'sheet' });
-    slots.slice(p, p + 16).forEach((it, i) => {
+    slots.slice(p, p + per).forEach((it, i) => {
       if (!it) return;
-      const col = i % 2, row = Math.floor(i / 2);
-      const lbl = buildLabel(it, outline);
+      const col = i % o.cols, row = Math.floor(i / o.cols);
+      const lbl = buildLabel(it, o.outline, big);
       lbl.style.cssText = 'left:' + (s.left + col * (s.w + s.gapX)) + 'mm;top:' + (s.top + row * (s.h + s.gapY)) + 'mm;width:' + s.w + 'mm;height:' + s.h + 'mm';
       sheet.append(lbl);
     });
     pa.append(sheet);
   }
+  pa.querySelectorAll('.lbl.big .hd:not(.long)').forEach(e => { e.style.whiteSpace = 'nowrap'; let s = 24; while (e.scrollWidth > e.clientWidth + 1 && s > 14) { s -= 0.5; e.style.fontSize = s + 'pt'; } });
+  pa.querySelectorAll('.lbl.big .hd.long').forEach(e => { let s = 15; while (e.scrollHeight > e.clientHeight + 1 && s > 9) { s -= 0.5; e.style.fontSize = s + 'pt'; } });
   toast('Loading product photos…');
   const imgs = [...pa.querySelectorAll('img')];
   await Promise.race([Promise.all(imgs.map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))), new Promise(r => setTimeout(r, 8000))]);
   imgs.forEach(i => { if (!i.naturalWidth) i.style.visibility = 'hidden'; });
-  window.print();
-});
+}
+
+// ---------- DASHBOARD ----------
+const shortTitle = t => t.replace(/^ORDERED - /, '').replace(/^Wilson & Bradley Hardware Order - /, 'Order ');
+function renderDash() {
+  const open = orders.filter(o => o.status === 'sent' || o.status === 'placed').sort((a, b) => ((b.placedAt || b.sentAt || '') > (a.placedAt || a.sentAt || '') ? 1 : -1));
+  const since = Date.now() - 30 * 864e5;
+  const delivered = orders.filter(o => o.status === 'delivered').sort((a, b) => (b.deliveredAt > a.deliveredAt ? 1 : -1));
+  const backs = []; open.forEach(o => (o.backorders || []).forEach(b => backs.push(Object.assign({ order: o }, b))));
+  $('sAwait').textContent = open.length; $('sBack').textContent = backs.length;
+  $('sDel').textContent = delivered.filter(o => new Date(o.deliveredAt).getTime() > since).length; $('sDraft').textContent = draft.lines.length;
+  const fill = (id, rows, empty) => { const b = $(id); b.innerHTML = ''; if (!rows.length) b.append(h('div', { class: 'empty', text: empty })); rows.forEach(r => b.append(r)); };
+  fill('dAwait', open.map(o => h('div', { class: 'drow noimg' },
+    h('div', {}, h('div', { class: 't', text: shortTitle(o.title) }),
+      h('div', { class: 'm', text: [o.confirmation && o.confirmation.num ? 'Conf #' + o.confirmation.num : 'Awaiting confirmation', o.confirmation && o.confirmation.delivery ? 'Delivery ' + o.confirmation.delivery : '', o.lines.length + ' item(s)'].filter(Boolean).join(' · ') })),
+    h('span', { class: 'chip ' + o.status, text: o.status }))), 'Nothing awaiting delivery.');
+  fill('dBack', backs.map(b => h('div', { class: 'drow' }, thumb(b.sku),
+    h('div', {}, h('div', { class: 't', text: b.qty + ' × ' + b.name }), h('div', { class: 'm', text: b.sku + ' · ' + shortTitle(b.order.title) })),
+    h('div', { class: 'm', style: 'text-align:right;font-weight:700;color:var(--warn)', text: b.expected || 'backorder' }))), 'No backorders on open orders.');
+  fill('dDel', delivered.slice(0, 8).map(o => h('div', { class: 'drow noimg' },
+    h('div', {}, h('div', { class: 't', text: shortTitle(o.title) }), h('div', { class: 'm', text: o.lines.length + ' item(s)' })),
+    h('div', { class: 'm', text: fmtDate(o.deliveredAt) }))), 'No deliveries recorded yet.');
+  const agg = new Map();
+  orders.filter(o => o.status !== 'cancelled').forEach(o => o.lines.forEach(l => {
+    const k = l.sku.toUpperCase(); const a = agg.get(k) || { sku: l.sku, name: l.name, qty: 0, n: 0 }; a.qty += l.qty; a.n++; agg.set(k, a);
+  }));
+  let top = [...agg.values()].sort((a, b) => b.n - a.n || b.qty - a.qty).slice(0, 10);
+  if (top.length < 5) { $('dTopNote').textContent = 'From your Wilson & Bradley purchases over the last 12 months (until this app has more order history).'; top = TOP_ITEMS.slice(0, 10).map(i => ({ sku: i.sku, name: i.name, qty: i.qty12, n: null })); }
+  else $('dTopNote').textContent = 'From orders recorded in this app.';
+  fill('dTop', top.map(a => { const item = BY_SKU.get(a.sku.toUpperCase());
+    return h('div', { class: 'drow' }, thumb(a.sku),
+      h('div', {}, h('div', { class: 't', text: a.name }), h('div', { class: 'm', text: a.sku + ' · ' + (a.n ? a.n + ' order(s), ' + a.qty + ' total' : a.qty + ' in 12 months') })),
+      item ? h('button', { class: 'btn-secondary btn-small', text: '+ Add', onclick: async () => { if (await requestAdd(item, getDefQty(item.sku))) toast('Added ' + item.name); renderDash(); } }) : h('span')); }), 'No orders yet.');
+}
+document.querySelectorAll('.stats .card').forEach(c => c.addEventListener('click', () => showView(c.dataset.go)));
 
 // ---------- SETTINGS ----------
 function fillListSelect(id, val, allowNone) {
@@ -3349,7 +3490,11 @@ function renderSettings() {
   $('tForget').style.display = connected ? '' : 'none';
   fillListSelect('cfgOrdered', cfg.listOrdered); fillListSelect('cfgPlaced', cfg.listPlaced);
   fillListSelect('cfgDelivered', cfg.listDelivered); fillListSelect('cfgConf', cfg.listConf, true);
+  $('pinState').textContent = cfg.pin ? '— PIN is set' : '— no PIN';
 }
+$('btnOpenLabels').addEventListener('click', () => showView('labels'));
+$('btnLblBack').addEventListener('click', () => showView('settings'));
+$('pinSave').addEventListener('click', () => { const v = $('pinNew').value.trim(); if (v) cfg.pin = v; else delete cfg.pin; saveCfg(); pinOk = true; $('pinNew').value = ''; renderSettings(); toast(v ? 'PIN saved' : 'PIN removed'); });
 $('tKey').addEventListener('input', () => {
   const k = $('tKey').value.trim(), a = $('tGet');
   if (k) { a.href = 'https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&name=CN%20Fitouts%20Orders&key=' + encodeURIComponent(k); a.style.display = ''; } else a.style.display = 'none';
@@ -3387,7 +3532,7 @@ $('fileImport').addEventListener('change', async e => {
 });
 
 // ---------- boot ----------
-refreshCats(); updateCounters(); renderOrder();
+refreshCats(); updateCounters(); renderOrder(); renderDash();
 if (creds().key && cfg.listConf) refreshConf(true);
 setInterval(() => { if (creds().key && cfg.listConf) refreshConf(true); }, 5 * 60 * 1000);
 let deferredInstall = null;
@@ -3395,7 +3540,7 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferr
 window.addEventListener('appinstalled', () => { $('btnInstall').style.display = 'none'; toast('App installed'); });
 $('btnInstall').addEventListener('click', async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $('btnInstall').style.display = 'none'; });
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
-window.__app = { handleScan, getDraft: () => draft, getOrders: () => orders, showView, parseConf, refreshConf, labelInfo, buildLabel }; // used by tests
+window.__app = { buildSheets, QUICK_ITEMS: () => QUICK_ITEMS, handleScan, getDraft: () => draft, getOrders: () => orders, showView, parseConf, refreshConf, labelInfo, buildLabel }; // used by tests
 })();
 </script>
 </body>
