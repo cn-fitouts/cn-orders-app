@@ -3064,6 +3064,7 @@ $('sendBtn').addEventListener('click', async () => {
   if (!creds().key) return setStatus('Connect Trello first (Settings tab).', 'err');
   sending = true; $('sendBtn').disabled = true;
   const p = draft.progress || (draft.progress = {});
+  if (!p.cardId && /^Wilson & Bradley Hardware Order - \d{2} \w{3} \d{4}$/.test(draft.title)) { draft.title = defaultTitle(); saveDraft(); $('cardTitle').value = draft.title; }
   try {
     if (p.mergeCardId) { const ex = await findOpenOrderCardById(p.mergeCardId); if (ex) { await mergeIntoCard(ex, p); return; } }
     if (!p.cardId && !p.mergeDone) {
@@ -3244,9 +3245,10 @@ const orderedName = (title, num) => 'ORDERED - ' + title.replace(/^ORDERED - /, 
 function doneConf(id) { if (!matchedConf.includes(id)) { matchedConf.push(id); LS.set('wb4_matched', matchedConf); } }
 
 async function refreshConf(quiet) {
-  if (!cfg.listConf) { confCards = []; renderConf(); return; }
+  if (!cfg.listConf) { try { await syncOpenCards(); } catch (e) {} confCards = []; renderConf(); return; }
   if (confBusy) return; confBusy = true;
   try {
+    try { await syncOpenCards(); } catch (e) { console.warn('card sync', e); }
     confCards = await trello('GET', '/lists/' + cfg.listConf + '/cards', { fields: 'name,desc,shortUrl' });
     await autoProcess();
     renderConf(); if (currentVw === 'dash') renderDash();
@@ -3255,6 +3257,32 @@ async function refreshConf(quiet) {
   finally { confBusy = false; }
 }
 function openOrders() { return orders.filter(o => o.status === 'sent'); }
+// Trello is the source of truth for orders not yet placed: pick up edits made on the card (items added, merged,
+// qty changed) and keep the attached CSV matching the checklist. An archived/deleted card stops being tracked.
+async function syncOpenCards() {
+  let changed = false;
+  for (const o of orders.filter(o => o.status === 'sent' && o.cardId)) {
+    let c;
+    try { c = await trello('GET', '/cards/' + o.cardId, { fields: 'name,closed,shortUrl', checklists: 'all', attachments: 'true', attachment_fields: 'name' }); }
+    catch (e) { if (/ 404/.test(e.message)) { o.status = 'cancelled'; o.note = 'Trello card was deleted'; changed = true; } continue; }
+    if (c.closed) { o.status = 'cancelled'; o.note = 'Trello card archived (merged into another order or cancelled)'; changed = true; continue; }
+    const cl = (c.checklists || []).find(x => x.name === 'Hardware Items');
+    if (!cl) continue;
+    const lines = [];
+    (cl.checkItems || []).slice().sort((a, b) => a.pos - b.pos).forEach(it => { const m = it.name.match(lineRe); if (m) lines.push({ sku: m[2], qty: parseInt(m[1], 10), name: m[3] }); });
+    if (!lines.length) continue;
+    const sig = ls => ls.map(x => x.sku.toUpperCase() + 'x' + x.qty).sort().join();
+    const csvs = (c.attachments || []).filter(a => /^wilson-bradley-order-.*\.csv$/i.test(a.name));
+    if (o.title !== c.name) { o.title = c.name; changed = true; }
+    if (sig(lines) === sig(o.lines) && csvs.length) continue;
+    o.lines = lines; changed = true;
+    for (const a of csvs) await trello('DELETE', '/cards/' + c.id + '/attachments/' + a.id);
+    const fd = new FormData();
+    fd.append('file', new Blob([csvFor(lines)], { type: 'text/csv' }), csvName()); fd.append('name', csvName());
+    await trello('POST', '/cards/' + c.id + '/attachments', {}, fd);
+  }
+  if (changed) { saveOrders(); updateCounters(); if (currentVw === 'orders') renderOrders(); if (currentVw === 'dash') renderDash(); }
+}
 // Confident cases are handled automatically; anything unclear is left on screen for a person to decide.
 async function autoProcess() {
   for (const c of confCards.filter(c => !matchedConf.includes(c.id))) {
@@ -3604,7 +3632,7 @@ $('fileImport').addEventListener('change', async e => {
 // ---------- boot ----------
 refreshCats(); updateCounters(); renderOrder(); renderDash();
 if (creds().key && cfg.listConf) refreshConf(true);
-setInterval(() => { if (creds().key && cfg.listConf) refreshConf(true); }, 5 * 60 * 1000);
+setInterval(() => { if (creds().key) refreshConf(true); }, 5 * 60 * 1000);
 let deferredInstall = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; $('btnInstall').style.display = ''; });
 window.addEventListener('appinstalled', () => { $('btnInstall').style.display = 'none'; toast('App installed'); });
