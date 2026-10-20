@@ -3065,6 +3065,17 @@ $('sendBtn').addEventListener('click', async () => {
   sending = true; $('sendBtn').disabled = true;
   const p = draft.progress || (draft.progress = {});
   try {
+    if (p.mergeCardId) { const ex = await findOpenOrderCardById(p.mergeCardId); if (ex) { await mergeIntoCard(ex, p); return; } }
+    if (!p.cardId && !p.mergeDone) {
+      const ex = await findOpenOrderCard();
+      if (ex) {
+        const yes = await modal({ title: 'Add to the open order card?', tone: 'info',
+          body: h('div', {}, h('p', { text: '"' + ex.card.name + '" is already in To be Ordered with ' + ex.lines.length + ' item(s).' }),
+            h('p', { text: 'Only add to it if that order has NOT been placed on the Wilson & Bradley site yet.' })),
+          yes: 'Add to that card', no: 'Make a new card' });
+        if (yes) { await mergeIntoCard(ex, p); return; }
+      }
+    }
     setStatus('Creating Trello card…', 'pending');
     if (!p.cardId) {
       const card = await trello('POST', '/cards', { idList: cfg.listOrdered, name: draft.title, desc: 'Hardware order from the CN Fitouts ordering app.\n\nItems: ' + draft.lines.length });
@@ -3096,9 +3107,66 @@ $('sendBtn').addEventListener('click', async () => {
     setStatus('Sent to Trello' + (url ? ': <a href="' + url + '" target="_blank" rel="noopener">open card</a>' : '') + '.' + note +
       ' Upload the CSV on the Wilson &amp; Bradley site, then match the confirmation on the Orders tab.', 'ok', true);
   } catch (e) {
-    setStatus('Error: ' + e.message + (p.cardId ? ' (progress saved — tap Send again to resume)' : ''), 'err');
+    setStatus('Error: ' + e.message + (p.cardId || p.mergeCardId ? ' (progress saved — tap Send again to resume)' : ''), 'err');
   } finally { sending = false; $('sendBtn').disabled = false; }
 });
+
+// ---------- add to an existing "To be Ordered" card ----------
+const ORDER_CARD_PREFIX = 'Wilson & Bradley Hardware Order';
+const lineRe = /^(\d+) x (\S+) - (.*)$/;
+// Newest card in To be Ordered whose name starts with the standard title (not one already marked ORDERED).
+async function findOpenOrderCard() {
+  if (cfg.listConf) { try { await refreshConf(true); } catch (e) {} } // a confirmation that's arrived moves its card out first
+  const cards = await trello('GET', '/lists/' + cfg.listOrdered + '/cards', { fields: 'name,shortUrl,desc' });
+  const c = cards.filter(c => c.name.startsWith(ORDER_CARD_PREFIX)).sort((a, b) => (a.id < b.id ? 1 : -1))[0];
+  if (!c) return null;
+  const cls = await trello('GET', '/cards/' + c.id + '/checklists', {});
+  const cl = cls.find(x => x.name === 'Hardware Items') || cls[0] || null;
+  const lines = [];
+  (cl ? cl.checkItems : []).forEach(it => { const m = it.name.match(lineRe); if (m) lines.push({ id: it.id, qty: parseInt(m[1], 10), sku: m[2], name: m[3] }); });
+  return { card: c, checklist: cl, lines };
+}
+async function findOpenOrderCardById(id) {
+  const c = await trello('GET', '/cards/' + id, { fields: 'name,shortUrl,desc' });
+  const cls = await trello('GET', '/cards/' + id + '/checklists', {});
+  const cl = cls.find(x => x.name === 'Hardware Items') || cls[0] || null;
+  const lines = [];
+  (cl ? cl.checkItems : []).forEach(it => { const m = it.name.match(lineRe); if (m) lines.push({ id: it.id, qty: parseInt(m[1], 10), sku: m[2], name: m[3] }); });
+  return { card: c, checklist: cl, lines };
+}
+async function mergeIntoCard(ex, p) {
+  const card = ex.card;
+  p.mergeCardId = card.id; saveDraft();
+  let clId = ex.checklist && ex.checklist.id;
+  if (!clId) { clId = (await trello('POST', '/checklists', { idCard: card.id, name: 'Hardware Items' })).id; }
+  const merged = ex.lines.map(l => ({ sku: l.sku, name: l.name, qty: l.qty, id: l.id }));
+  for (let i = 0; i < draft.lines.length; i++) {
+    const l = draft.lines[i], m = merged.find(x => x.sku.toUpperCase() === l.sku.toUpperCase());
+    setStatus('Adding to existing card ' + (i + 1) + '/' + draft.lines.length + '…', 'pending');
+    if (i < (p.mergeDone || 0)) continue; // already on the card (resumed after an error)
+    if (m) { await trello('PUT', '/cards/' + card.id + '/checkItem/' + m.id, { name: (m.qty + l.qty) + ' x ' + m.sku + ' - ' + m.name }); m.qty += l.qty; }
+    else { const it = await trello('POST', '/checklists/' + clId + '/checkItems', { name: l.qty + ' x ' + l.sku + ' - ' + l.name }); merged.push({ sku: l.sku, name: l.name, qty: l.qty, id: it.id }); }
+    p.mergeDone = i + 1; saveDraft();
+  }
+  // Replace the old CSV with one combined CSV so there's only one file to upload.
+  let note = ' Combined CSV attached.';
+  try {
+    const atts = await trello('GET', '/cards/' + card.id + '/attachments', { fields: 'name' });
+    for (const a of atts.filter(a => /^wilson-bradley-order-.*\.csv$/i.test(a.name))) await trello('DELETE', '/cards/' + card.id + '/attachments/' + a.id);
+    const fd = new FormData();
+    fd.append('file', new Blob([csvFor(merged)], { type: 'text/csv' }), csvName()); fd.append('name', csvName());
+    await trello('POST', '/cards/' + card.id + '/attachments', {}, fd);
+    await trello('PUT', '/cards/' + card.id, { desc: 'Hardware order from the CN Fitouts ordering app.\n\nItems: ' + merged.length + '\nLast added to: ' + fmtDate(new Date().toISOString()) });
+  } catch (e) { note = ' (CSV not updated: ' + e.message + ')'; }
+  const lines = merged.map(l => ({ sku: l.sku, name: l.name, qty: l.qty }));
+  const o = orders.find(x => x.cardId === card.id);
+  if (o) { o.lines = lines; o.title = card.name; }
+  else orders.unshift({ id: 'o' + Date.now(), title: card.name, status: 'sent', createdAt: new Date().toISOString(), sentAt: new Date().toISOString(), cardId: card.id, cardUrl: card.shortUrl || '', lines, confirmation: null });
+  saveOrders();
+  const added = draft.lines.length;
+  draft = newDraft(); saveDraft(); updateCounters(); renderOrder(); if (currentVw === 'scan') renderScan();
+  setStatus('Added ' + added + ' item(s) to the existing card — now ' + merged.length + ' items: <a href="' + (card.shortUrl || '#') + '" target="_blank" rel="noopener">open card</a>.' + note, 'ok', true);
+}
 
 // ---------- ORDERS view ----------
 function cardTime(id) { return new Date(parseInt(id.substring(0, 8), 16) * 1000).toISOString(); }
@@ -3320,7 +3388,9 @@ function renderOrders() {
 $('btnRefreshConf').addEventListener('click', () => refreshConf(false));
 
 // ---------- LABELS view ----------
-const QUICK_ITEMS = TOP_ITEMS.concat(Object.keys(EXTRA_LABEL_QTY).map(s => BY_SKU.get(s.toUpperCase())).filter(i => i && !TOP_ITEMS.some(t => t.sku === i.sku)));
+// Removed from Quick Order (still in Full Catalogue): BHOAST, ZI72CS, ABD1000S, ZA45400S, LADL22A, MH7822420
+const QUICK_HIDE = new Set(['BHOAST', 'ZI72CS', 'ABD1000S', 'ZA45400S', 'LADL22A', 'MH7822420']);
+const QUICK_ITEMS = TOP_ITEMS.concat(Object.keys(EXTRA_LABEL_QTY).map(s => BY_SKU.get(s.toUpperCase())).filter(i => i && !TOP_ITEMS.some(t => t.sku === i.sku))).filter(i => !QUICK_HIDE.has(i.sku));
 const LEGRA_ITEMS = Object.keys(LEGRA_LABEL_QTY).map(s => BY_SKU.get(s.toUpperCase())).filter(i => i && !QUICK_ITEMS.some(t => t.sku === i.sku));
 const LABEL_ITEMS = QUICK_ITEMS.concat(LEGRA_ITEMS);
 const labelSel = new Set(LABEL_ITEMS.map(i => i.sku));
